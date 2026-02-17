@@ -23,9 +23,10 @@ This project analyzes a dataset of over 336,000 flights departing from New York 
 <img width="957" height="391" alt="heatmap" src="https://github.com/user-attachments/assets/eeff5d98-37c5-4cc6-be2b-b7f99f21b101" />
  
  *Heatmap showing average delays by hour and day of week.*
-\n
-\n
-\n
+
+
+##
+
 <img width="918" height="479" alt="plane_age" src="https://github.com/user-attachments/assets/a4ed7dd2-8018-4cf7-bfb7-077fb179139d" />
  
  *Analysis of how plane age correlates with delays.*
