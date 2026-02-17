@@ -1,0 +1,202 @@
+---
+title: "New York Flights Analysis"
+subtitle: "Operational Efficiency and Factors Affecting Delays"
+author: "Michał Węglorz"
+date: "`r Sys.Date()`"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE, fig.width = 8, fig.height = 5)
+
+library('tidyverse')
+library('lubridate')
+library('nycflights13')
+
+theme_set(theme_minimal())
+Sys.setlocale("LC_TIME", "English")
+```
+## Executive Summary
+This report analyzes over 300.000 fligths from New York in 2013. The goal is to identify factors which influenced filghts departures and evaluate airline performance
+
+Key findings:
+
+1. Best Time to Fly: morning flights are the most punctual
+
+2. Seasonality: Summer months and December provides the highest average delay
+
+3. Weather Influence: Strong correlation between visibility and delay
+
+## Traffic Overview
+
+Before diving into delays, let's look at the market structure. Who dominates the NYC airspace and where are people flying?
+```{r, echo=FALSE, fig.height=4.5}
+flights %>% 
+  left_join(airlines, by="carrier") %>% 
+  count(name, sort=TRUE) %>% 
+  drop_na(name) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(name,n), y=n))+
+    geom_col(fill="dodgerblue", alpha=0.6)+
+    coord_flip()+
+    labs(title="The most popular airlines",
+         y="Number of flights",
+         x=NULL,
+         caption="DATA: nycflights13")+
+    theme(plot.title = element_text(face="bold", size=15, hjust = 0.5))
+```
+
+
+## Traffic Overview
+```{r, echo=FALSE}
+flights %>% 
+  left_join(airports, by=c("dest"="faa")) %>% 
+  count(name, sort = TRUE) %>%
+  drop_na(name) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(name, n), y=n))+
+    geom_col(fill="dodgerblue", alpha = 0.6)+
+    coord_flip()+
+    labs(title="TOP 10 Most Popular destinations from NYC",
+         x=NULL,
+         y="Number of flights")+
+    theme(plot.title = element_text(face="bold", size=15))
+```
+
+## Timing Analysis: When to Fly?
+Timing is one of the most critical factors for passengers. I analyzed delays across different time scales.
+
+The heatmap below reveals a clear pattern: delays accumulate throughout the day.
+```{r, echo=FALSE, fig.height=4, fig.width=7.5}
+flights_date <- flights %>% 
+  mutate(weekday = wday(time_hour, label=TRUE, week_start = 1))
+
+flights_date %>% 
+  group_by(weekday, hour) %>% 
+  summarise(avg_delay=mean(dep_delay, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  filter(!is.na(avg_delay)) %>% 
+  ggplot(aes(x=hour, y=weekday, fill=avg_delay))+
+    geom_tile(color="white")+
+    scale_fill_gradient2(
+      low="green",
+      mid="white",
+      high="red",
+      midpoint=0
+    )+
+    labs(
+      title="Assessing the best time for flight",
+      x="Hour of day",
+      y=NULL,
+      fill="Average\nDelay"
+    )+
+    coord_fixed()+
+    theme(plot.title = element_text(face="bold", size=15, hjust=0.5))
+```
+
+## Seasonal Trends
+There is a noticeable spike in delays during the summer holiday season and December.
+```{r, echo=FALSE, fig.height=4}
+flights %>% 
+  group_by(month) %>% 
+  summarise(avg_delay = mean(dep_delay, na.rm=TRUE),
+            n_flights = n()) %>% 
+  filter(n_flights > 20) %>%
+  ggplot(aes(x=month, y=avg_delay))+
+    geom_line(color="darkblue", size=3, alpha=0.6)+
+    labs(
+      title="Seasonal Trend in Departure Delays",
+      x=NULL,
+      y="Average Departure Delay (min)"
+    )+
+  scale_x_continuous(breaks = 1:12, labels = month.abb)+
+  theme(plot.title = element_text(face="bold", size=15, hjust=0.5))
+```
+
+## Airline Performance & Business Model
+
+Punctuality Ranking
+We evaluated airlines based on arrival delays. A negative value indicates that, on average, the airline arrives ahead of schedule.
+```{r, echo=FALSE, fig.height=4}
+flights %>% 
+  left_join(airlines, by="carrier") %>% 
+  group_by(name) %>% 
+  summarise(avg_arrival_delay = mean(arr_delay, na.rm=TRUE),
+            n_flights = n()) %>% 
+  filter(n_flights > 20) %>% 
+  ggplot(aes(x=reorder(name, avg_arrival_delay), y=avg_arrival_delay))+
+    geom_col(fill="lightblue", color="black", alpha=0.7)+
+    coord_flip()+
+    labs(
+      title="Punctuality Ranking",
+      subtitle="Negative value means that arrival was before scheduled time",
+      x=NULL,
+      y="Average Arrival Delay (min)"
+    )+
+    theme(plot.title = element_text(face="bold", size=15, hjust=0.3),
+          plot.subtitle = element_text(hjust=0.3))
+```
+
+## Operational Range
+
+Understanding the business model: some airlines specialize in short-haul regional flights, while others cover long-distance routes.
+```{r, echo=FALSE, fig.height=4}
+flights %>% 
+  filter(!is.na(distance)) %>% 
+  left_join(airlines, by="carrier") %>% 
+  ggplot(aes(x=reorder(name, distance), y=distance))+
+  geom_boxplot(fill="steelblue", color="black", alpha=0.6)+
+  coord_flip()+
+  labs(
+    title="Operational Range",
+    y="Distance (miles)",
+    x=NULL
+  )+
+  theme(plot.title = element_text(face="bold", size=15, hjust=0.5))
+```
+
+## Technical & Environmental Factors
+Impact of Weather (Fog)
+Visibility is a major constraint for airport operations. The data shows a sharp increase in delays when visibility drops below 2 miles.
+```{r, echo=FALSE, fig.height=4}
+flights %>% 
+  left_join(weather, by=c("year", "month", "day", "hour", "origin")) %>% 
+  select(dep_delay, visib) %>% 
+  filter(!is.na(dep_delay), !is.na(visib)) %>% 
+  group_by(visib) %>% 
+  summarise(avg_delay = mean(dep_delay, na.rm=TRUE),
+            n_flights = n()) %>% 
+  filter(n_flights > 20) %>% 
+  ggplot(aes(x=visib, y=avg_delay))+
+    geom_point(size=4, color="darkorange")+
+    geom_smooth(method="loess", color="brown", se=FALSE)+
+    labs(
+      title="Fog Effect on Flight Delay",
+      x="Visibility (miles)",
+      y="Average Delay (min)"
+    )+
+    scale_x_continuous(breaks = seq(0,10,2))+
+    theme(plot.title = element_text(face="bold", size =15, hjust=0.5))
+```
+
+
+## Plane Age vs Performance
+The data indicates **no clear trend** suggesting that plane age is a significant factor. Average delays fluctuate across different ages without a definitive pattern, implying that maintenance schedules likely keep older aircraft just as reliable as newer ones in terms of punctuality.
+```{r, echo=FALSE, fig.height=4, fig.width=7.5}
+flights %>% 
+  left_join(planes, by="tailnum", suffix = c("_flight", "_plane")) %>% 
+  mutate(age = year_flight - year_plane) %>% 
+  filter(!is.na(age)) %>% 
+  group_by(age) %>% 
+  summarise(avg_delay = mean(dep_delay, na.rm=TRUE),
+            n_flights = n()) %>% 
+  filter(n_flights > 20) %>% 
+  ggplot(aes(x=age, y=avg_delay))+
+    geom_point(alpha=0.6, color="steelblue", size = 4)+
+    geom_smooth(method="loess", color="red", se=FALSE)+
+    labs(title="Does plane age affect flight delay?",
+         y="Average Flight Delay (min)",
+         x="Plane Age (year)")+
+    theme(plot.title = element_text(face="bold", size =15, hjust = 0.5))
+```
+
